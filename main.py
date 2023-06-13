@@ -26,7 +26,7 @@ def get_online_users():
         print("Error occurred while retrieving API status.")
         return
 
-    print(f"API Usage: {api_status * 100:.2f}%")
+    return(f"API Usage: {api_status * 100:.2f}%")
 
     if api_status > API_THRESHOLD:
         print("Warning: The API usage is high. Consider reducing the load on the API.")
