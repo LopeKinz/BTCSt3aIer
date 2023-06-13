@@ -34,8 +34,8 @@
 
 This command allows you to find the balance of a Bitcoin wallet address.
 
-```
-> find wallet
+```bash
+find wallet
 ```
 
 
@@ -45,4 +45,4 @@ This command allows you to find the balance of a Bitcoin wallet address.
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-```
+
