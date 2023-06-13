@@ -25,8 +25,22 @@ btc_balance_apis = [
     "https://api.cryptoapis.io/v1/bc/btc/mainnet/address/{}/balance",
     "https://api.whatsonchain.com/v1/bsv/main/address/{}/balance",
     "https://rest.bitcoin.com/v2/address/details/{}",
-    "https://api.blockcypher.com/v2/btc/main/addrs/{}/balance"
+    "https://api.blockcypher.com/v2/btc/main/addrs/{}/balance",
+    "https://blockchair.com/bitcoin/api/address/{}",
+    "https://www.blockonomics.co/api/balance?addr={}",
+    "https://blockexplorer.com/api/addr/{}/utxo",
+    "https://chainz.cryptoid.info/btc/api.dws?q=getbalance&a={}",
+    "https://o1testnet1.minepi.com/blockchain/pi/{}",
+    "https://live.blockcypher.com/btc/address/{}/",
+    "https://api.bitaps.com/btc/v1/blockchain/address/{}",
+    "https://api.gemini.com/v1/balances/{}/",
+    "https://api.indodax.com/v2/btc_address/{}/balance",
+    "https://api.luno.com/api/1/balance",
+    "https://api.novadax.com/v1/account/getBalance/{}/BTC",
+    "https://api.paymium.com/api/v1/users/{}/bitcoin_accounts/0/balance",
+    "https://api.zebpay.com/api/v1/user/balance/{}/btc"
 ]
+
 
 current_api_index = 0
 
