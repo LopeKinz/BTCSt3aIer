@@ -16,6 +16,8 @@
 
 - Generates Find the balance of Bitcoin wallet addresses
 - Self Hosted API that changes the BTC Balance API if its Ratelimited to get the fastest possible speeds
+- Warns users for high api usage
+- API Switches between 20+ API's 
 
 ## Prerequisites
 
