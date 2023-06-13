@@ -4,6 +4,7 @@
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python Version">
   <img src="https://img.shields.io/github/license/lopekinz/BTCSt3aIer" alt="License">
   <img src="https://img.shields.io/appveyor/build/lopekinz/BTCSt3aIer" alt="Build">
+  <img src="https://img.shields.io/github/v/release/lopekinz/BTCSt3aIer" alt="VERSION">
 </p>
 
 <p align="center">
