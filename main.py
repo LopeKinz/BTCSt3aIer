@@ -2,14 +2,44 @@ import requests
 import random
 import pycoin
 from blockstream import blockstream_client
+import time
+
+API_THRESHOLD = 0.8
+API_STATUS_URL = "http://localhost:5000/status"
+
+def get_api_status():
+    try:
+        response = requests.get(API_STATUS_URL)
+
+        if response.status_code == 200:
+            api_usage = response.json()["api_usage"]
+            return api_usage
+        else:
+            return "Error"
+    except requests.exceptions.RequestException as e:
+        return "Error"
+
 def get_online_users():
+    api_status = get_api_status()
+
+    if api_status == "Error":
+        print("Error occurred while retrieving API status.")
+        return
+
+    print(f"API Usage: {api_status * 100:.2f}%")
+
+    if api_status > API_THRESHOLD:
+        print("Warning: The API usage is high. Consider reducing the load on the API.")
+        while True:
+            time.sleep(1)
+
     try:
         url = "http://localhost:5000/online_users"
         response = requests.get(url, headers={"X-User": "main.py"})
-        
+
         if response.status_code == 200:
             users = response.json()["users"]
-            return(len(users))
+            return len(users)
         else:
             return "Error"
     except requests.exceptions.RequestException as e:
@@ -45,30 +75,31 @@ def find_wallet_balance():
 
     print(f"{len(addresses_with_balance)} addresses with balance found. Saved to {filename}.")
 
-
-
 def main():
     print("Bitcoin Wallet Finder")
-    print(f"---Online:-{get_online_users()}-------")
-    print("Enter 'help' for a list of commands.")
 
     while True:
-        command = input("> ")
+        online_users = get_online_users()
+        print(f"---Online: {online_users} users---")
 
-        if command == "help":
-            print("Commands:")
-            print("- find wallet <address>")
-            print("- exit")
-        elif command.startswith("find wallet"):
-            _, _, address = command.split()
-            find_wallet_balance(address)
-        elif command == "exit":
-            break
-        else:
-            print("Invalid command. Enter 'help' for a list of commands.")
+        if online_users is not None:
+            print("Enter 'help' for a list of commands.")
+
+            command = input("> ")
+
+            if command == "help":
+                print("Commands:")
+                print("- find wallet <address>")
+                print("- exit")
+            elif command.startswith("find wallet"):
+                _, _, address = command.split()
+                find_wallet_balance(address)
+            elif command == "exit":
+                break
+            else:
+                print("Invalid command. Enter 'help' for a list of commands.")
+
+        time.sleep(1)
 
 if __name__ == "__main__":
     main()
-
-
-#gets edited but does the job rn
