@@ -13,8 +13,8 @@
 </p>
 
 ## Problems
-- Online Users not functioning
-- Tokens buggy
+- Online Users not functioning (number not changing)
+- Tokens buggy (says token invalid even when ist saved in the token.txt)
 
 ## Warning
 - If you Paid for this or similar product you most likely got Scammed!
