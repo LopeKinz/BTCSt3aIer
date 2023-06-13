@@ -14,6 +14,7 @@
 
 ## Warning
 - If you Paid for this or similar product you most likely got Scammed!
+- You can get your free token via email : pinkyhax@gmail.com
 
 ## Features
 
