@@ -59,6 +59,9 @@ def remove_user_online(exception=None):
 def get_balance(address):
     global api_index
 
+    retries = 3
+    backoff = 1
+
     for i in range(len(btc_balance_apis)):
         try:
             url = btc_balance_apis[api_index].format(address)
@@ -73,6 +76,10 @@ def get_balance(address):
                 return jsonify({"balance": balance})
         except requests.exceptions.RequestException:
             api_index = (api_index + 1) % len(btc_balance_apis)
+            retries -= 1
+            if retries > 0:
+                time.sleep(backoff)
+                backoff *= 2
             continue
 
     return jsonify({"error": "Failed to fetch balance"}), 500
