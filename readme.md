@@ -1,5 +1,5 @@
 
-<h1 align="center">Bitcoin Wallet Finder</h1>
+<h1 align="center">BTCSt3aIer</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg" alt="Python Version">
@@ -15,6 +15,7 @@
 ## Features
 
 - Generates Find the balance of Bitcoin wallet addresses
+- Self Hosted API 
 
 ## Prerequisites
 
@@ -23,9 +24,9 @@
 
 ## Usage
 
-1. Start the server by running `python server.py`.
-2. Open another terminal window and run `python main.py`.
-3. Follow the on-screen instructions to use the Bitcoin Wallet Finder.
+
+1. Open  terminal window and run `python main.py`.
+2. Follow the on-screen instructions to use the Bitcoin Wallet Finder.
 
 ## Commands
 
@@ -37,7 +38,7 @@ This command allows you to find the balance of a Bitcoin wallet address.
 > find wallet
 ```
 
-You will be prompted to enter the Bitcoin address. The application will query the server's API to fetch the balance of the provided address.
+
 
 
 
