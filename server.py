@@ -56,6 +56,8 @@ def remove_user_online(exception=None):
     if user and user in online_users:
         online_users.remove(user)
 
+        
+        
 def get_balance(address):
     global api_index
 
