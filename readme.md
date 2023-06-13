@@ -12,6 +12,10 @@
   Bitcoin Wallet Finder is a Python application that allows you to find the balance of Bitcoin wallet addresses using a Flask API and an official BTC API. It provides a simple terminal-like menu for user interaction.
 </p>
 
+## Problems
+- Online Users not functioning
+- Tokens buggy
+
 ## Warning
 - If you Paid for this or similar product you most likely got Scammed!
 - You can get your free token via email : pinkyhax@gmail.com
