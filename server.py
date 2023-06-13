@@ -9,7 +9,23 @@ btc_balance_apis = [
     "https://api.blockcypher.com/v1/btc/main/addrs/{}/balance",
     "https://api.smartbit.com.au/v1/blockchain/address/{}/balance",
     "https://chain.api.btc.com/v3/address/{}",
-    "https://api.blockchair.com/bitcoin/dashboards/address/{}"
+    "https://api.blockchair.com/bitcoin/dashboards/address/{}",
+    "https://api.blockexplorer.com/v1/address/{}/balance",
+    "https://api.blockstream.space/api/address/{}/coins",
+    "https://blockchain.info/q/addressbalance/{}",
+    "https://api.walletexplorer.com/api/1/address?address={}",
+    "https://api.blockchain.com/v3/address/{}/balance",
+    "https://api.toshi.io/api/v0/bitcoin/addresses/{}",
+    "https://bitcoin.toshi.io/api/v0/addresses/{}/balance",
+    "https://blockexplorer.com/api/addr/{}/balance",
+    "https://btc.bitaps.com/{}/balance",
+    "https://api.btc21.org/address/{}",
+    "https://www.bitstamp.net/api/v2/balance/{}/",
+    "https://chain.so/api/v2/address/BTC/{}",
+    "https://api.cryptoapis.io/v1/bc/btc/mainnet/address/{}/balance",
+    "https://api.whatsonchain.com/v1/bsv/main/address/{}/balance",
+    "https://rest.bitcoin.com/v2/address/details/{}",
+    "https://api.blockcypher.com/v2/btc/main/addrs/{}/balance"
 ]
 
 current_api_index = 0
