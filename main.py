@@ -5,7 +5,7 @@ from blockstream import blockstream_client
 import time
 
 API_THRESHOLD = 0.8
-API_STATUS_URL = "http://localhost:5000/status"
+API_STATUS_URL = "http://localhost:5000/status"  # Update with the correct API status endpoint URL
 
 def get_api_status():
     try:
@@ -19,14 +19,14 @@ def get_api_status():
     except requests.exceptions.RequestException as e:
         return "Error"
 
-def get_online_users():
+def get_online_users(token):
     api_status = get_api_status()
 
     if api_status == "Error":
         print("Error occurred while retrieving API status.")
         return
 
-    return(f"API Usage: {api_status * 100:.2f}%")
+    print(f"API Usage: {api_status * 100:.2f}%")
 
     if api_status > API_THRESHOLD:
         print("Warning: The API usage is high. Consider reducing the load on the API.")
@@ -35,7 +35,8 @@ def get_online_users():
 
     try:
         url = "http://localhost:5000/online_users"
-        response = requests.get(url, headers={"X-User": "main.py"})
+        headers = {"X-User": "main.py", "Authorization": token}
+        response = requests.get(url, headers=headers)
 
         if response.status_code == 200:
             users = response.json()["users"]
@@ -54,7 +55,7 @@ def wif_to_address(wif):
     key = pycoin.key.Key.from_text(wif)
     return key.address()
 
-def find_wallet_balance():
+def find_wallet_balance(token):
     blockstream = blockstream_client.Client()
 
     num_addresses = int(input("Enter the number of addresses to generate and check: "))
@@ -64,7 +65,8 @@ def find_wallet_balance():
 
     for _ in range(num_addresses):
         address = generate_random_address()
-        balance = blockstream.get_address(address)["chain_stats"]["funded_txo_sum"]
+        headers = {"Authorization": token}
+        balance = blockstream.get_address(address, headers=headers)["chain_stats"]["funded_txo_sum"]
 
         if balance > 0:
             addresses_with_balance.append(address)
@@ -78,8 +80,10 @@ def find_wallet_balance():
 def main():
     print("Bitcoin Wallet Finder")
 
+    token = input("Enter your token: ")
+
     while True:
-        online_users = get_online_users()
+        online_users = get_online_users(token)
         print(f"---Online: {online_users} users---")
 
         if online_users is not None:
@@ -93,7 +97,7 @@ def main():
                 print("- exit")
             elif command.startswith("find wallet"):
                 _, _, address = command.split()
-                find_wallet_balance(address)
+                find_wallet_balance(token)
             elif command == "exit":
                 break
             else:
