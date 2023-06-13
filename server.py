@@ -42,7 +42,7 @@ btc_balance_apis = [
 ]
 
 
-current_api_index = 0
+api_index = 0
 
 @app.before_request
 def check_user_online():
@@ -57,30 +57,25 @@ def remove_user_online(exception=None):
         online_users.remove(user)
 
 def get_balance(address):
-    global current_api_index
+    global api_index
 
-    try:
-        url = btc_balance_apis[current_api_index].format(address)
-        response = requests.get(url)
-        data = response.json()
+    for i in range(len(btc_balance_apis)):
+        try:
+            url = btc_balance_apis[api_index].format(address)
+            response = requests.get(url)
+            data = response.json()
 
-        if "error" in data:
-            if current_api_index < len(btc_balance_apis) - 1:
-                # Switch to the next API if available
-                current_api_index += 1
-                return get_balance(address)
+            if "error" in data:
+                api_index = (api_index + 1) % len(btc_balance_apis)
+                continue
             else:
-                return jsonify({"error": data["error"]}), 404
-        else:
-            balance = data["balance"] / 10**8
-            return jsonify({"balance": balance})
-    except requests.exceptions.RequestException as e:
-        if current_api_index < len(btc_balance_apis) - 1:
-            # Switch to the next API if available
-            current_api_index += 1
-            return get_balance(address)
-        else:
-            return jsonify({"error": "Failed to fetch balance"}), 500
+                balance = data["balance"] / 10**8
+                return jsonify({"balance": balance})
+        except requests.exceptions.RequestException:
+            api_index = (api_index + 1) % len(btc_balance_apis)
+            continue
+
+    return jsonify({"error": "Failed to fetch balance"}), 500
 
 @app.route("/balance/<address>")
 def balance_route(address):
@@ -88,7 +83,7 @@ def balance_route(address):
 
 @app.route("/version")
 def version():
-    return 1.0
+    return "1.0"
 
 @app.route("/online_users", methods=["GET", "POST"])
 def manage_online_users():
