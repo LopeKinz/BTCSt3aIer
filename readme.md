@@ -1,3 +1,4 @@
+
 <h1 align="center">Bitcoin Wallet Finder</h1>
 
 <p align="center">
@@ -13,8 +14,7 @@
 
 ## Features
 
-- Find the balance of Bitcoin wallet addresses
-- Get a list of currently online users
+- Generates Find the balance of Bitcoin wallet addresses
 
 ## Prerequisites
 
@@ -39,17 +39,9 @@ This command allows you to find the balance of a Bitcoin wallet address.
 
 You will be prompted to enter the Bitcoin address. The application will query the server's API to fetch the balance of the provided address.
 
-### Get Online Users
 
-This command displays a list of currently online users.
-
-```
-> online users
-```
-
-The application will retrieve the list of online users from the server and display them.
 
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-
+```
