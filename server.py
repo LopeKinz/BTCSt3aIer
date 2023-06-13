@@ -1,5 +1,8 @@
 from flask import Flask, jsonify, request
 import requests
+import random
+import string
+
 
 app = Flask(__name__)
 
@@ -44,6 +47,41 @@ btc_balance_apis = [
 
 api_index = 0
 
+# Function to generate a random token
+def generate_token(length=16):
+    letters_and_digits = string.ascii_letters + string.digits
+    return ''.join(random.choice(letters_and_digits) for _ in range(length))
+
+# Function to save tokens to a file
+def save_tokens(tokens):
+    with open('tokens.txt', 'w') as f:
+        for token in tokens:
+            f.write(token + '\n')
+
+# Function to load tokens from a file
+def load_tokens():
+    try:
+        with open('tokens.txt', 'r') as f:
+            tokens = [line.strip() for line in f]
+            return set(tokens)
+    except FileNotFoundError:
+        return set()
+
+# Generate some initial tokens and load existing tokens
+tokens = load_tokens()
+tokens.update(generate_token() for _ in range(10))
+save_tokens(tokens)
+
+# Token validation decorator
+def token_required(f):
+    def decorated_function(*args, **kwargs):
+        token = request.headers.get("Authorization")
+        if token and token in tokens:
+            return f(*args, **kwargs)
+        else:
+            return jsonify({"error": "Invalid token"}), 401
+    return decorated_function
+
 @app.before_request
 def check_user_online():
     user = request.headers.get("X-User")
@@ -56,8 +94,6 @@ def remove_user_online(exception=None):
     if user and user in online_users:
         online_users.remove(user)
 
-        
-        
 def get_balance(address):
     global api_index
 
@@ -87,6 +123,7 @@ def get_balance(address):
     return jsonify({"error": "Failed to fetch balance"}), 500
 
 @app.route("/balance/<address>")
+@token_required
 def balance_route(address):
     return get_balance(address)
 
@@ -105,9 +142,27 @@ def manage_online_users():
             return jsonify({"message": f"{user} added to online users"})
         else:
             return jsonify({"error": "User not provided"}), 400
+
 @app.route("/status")
 def api_status():
     return jsonify({"api_usage": api_index / len(btc_balance_apis)})
+
+# Token validation endpoint
+@app.route("/validate_token", methods=["POST"])
+def validate_token():
+    token = request.json.get("token")
+    if token and token in tokens:
+        return jsonify({"valid": True})
+    else:
+        return jsonify({"valid": False}), 401
+
+# Token generation endpoint
+@app.route("/generate_token", methods=["POST"])
+def generate_token_endpoint():
+    token = generate_token()
+    tokens.add(token)
+    save_tokens(tokens)
+    return jsonify({"token": token})
 
 if __name__ == "__main__":
     app.run()
