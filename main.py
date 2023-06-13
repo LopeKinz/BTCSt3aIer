@@ -9,13 +9,11 @@ def get_online_users():
         
         if response.status_code == 200:
             users = response.json()["users"]
-            print("Currently online users:")
-            for user in users:
-                print(user)
+            return(len(users))
         else:
-            print("Error: Failed to fetch online users.")
+            return "Error"
     except requests.exceptions.RequestException as e:
-        print("Error: Failed to fetch online users.")
+        return "Error"
 
 def generate_random_address():
     secret_exponent = random.randint(1, pycoin.ecdsa.secp256k1.generator.order())
@@ -51,7 +49,7 @@ def find_wallet_balance():
 
 def main():
     print("Bitcoin Wallet Finder")
-    print("---------------------")
+    print(f"---Online:-{get_online_users()}-------")
     print("Enter 'help' for a list of commands.")
 
     while True:
@@ -60,13 +58,10 @@ def main():
         if command == "help":
             print("Commands:")
             print("- find wallet <address>")
-            print("- get online users")
             print("- exit")
         elif command.startswith("find wallet"):
             _, _, address = command.split()
             find_wallet_balance(address)
-        elif command == "get online users":
-            get_online_users()
         elif command == "exit":
             break
         else:
