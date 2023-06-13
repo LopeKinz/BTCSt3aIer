@@ -56,6 +56,10 @@ def get_balance(address):
 def balance_route(address):
     return get_balance(address)
 
+@app.route("/version")
+def version():
+    return 1.0
+
 @app.route("/online_users", methods=["GET", "POST"])
 def manage_online_users():
     if request.method == "GET":
