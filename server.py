@@ -103,6 +103,9 @@ def manage_online_users():
             return jsonify({"message": f"{user} added to online users"})
         else:
             return jsonify({"error": "User not provided"}), 400
+@app.route("/status")
+def api_status():
+    return jsonify({"api_usage": api_index / len(btc_balance_apis)})
 
 if __name__ == "__main__":
     app.run()
