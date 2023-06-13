@@ -1,12 +1,15 @@
 from flask import Flask, jsonify, request
+import redis
+
+app = Flask(__name__)
+db = redis.Redis()
 import requests
 import random
 import string
 
 
-app = Flask(__name__)
 
-online_users = set()
+users = 0
 
 btc_balance_apis = [
     "https://api.blockcypher.com/v1/btc/main/addrs/{}/balance",
@@ -43,22 +46,20 @@ btc_balance_apis = [
     "https://api.paymium.com/api/v1/users/{}/bitcoin_accounts/0/balance",
     "https://api.zebpay.com/api/v1/user/balance/{}/btc"
 ]
-
-
 api_index = 0
 
-# Function to generate a random token
+# Function to generate a random token (unchanged)
 def generate_token(length=16):
     letters_and_digits = string.ascii_letters + string.digits
     return ''.join(random.choice(letters_and_digits) for _ in range(length))
 
-# Function to save tokens to a file
+# Function to save tokens to a file (unchanged)
 def save_tokens(tokens):
     with open('tokens.txt', 'w') as f:
         for token in tokens:
             f.write(token + '\n')
 
-# Function to load tokens from a file
+# Function to load tokens from a file (unchanged)
 def load_tokens():
     try:
         with open('tokens.txt', 'r') as f:
@@ -67,12 +68,11 @@ def load_tokens():
     except FileNotFoundError:
         return set()
 
-# Generate some initial tokens and load existing tokens
 tokens = load_tokens()
 tokens.update(generate_token() for _ in range(10))
 save_tokens(tokens)
 
-# Token validation decorator
+# Token validation decorator (unchanged)
 def token_required(f):
     def decorated_function(*args, **kwargs):
         token = request.headers.get("Authorization")
@@ -82,25 +82,51 @@ def token_required(f):
             return jsonify({"error": "Invalid token"}), 401
     return decorated_function
 
-@app.before_request
-def check_user_online():
-    user = request.headers.get("X-User")
-    if user:
-        online_users.add(user)
+# API usage check decorator (new)
+def api_usage_check(f):
+    def decorated_function(*args, **kwargs):
+        api_usage = api_index / len(btc_balance_apis)
+        if api_usage > 0.8:
+            return jsonify({"error": "API usage limit exceeded"}), 429
+        else:
+            return f(*args, **kwargs)
+    return decorated_function
 
-@app.teardown_request
-def remove_user_online(exception=None):
-    user = request.headers.get("X-User")
-    if user and user in online_users:
-        online_users.remove(user)
 
-def get_balance(address):
+# API status endpoint (new)
+@app.route("/status")
+def api_status():
+    api_usage = api_index / len(btc_balance_apis)
+    return jsonify({"api_usage": api_usage})
+
+# Token validation endpoint (unchanged)
+@app.route("/validate_token", methods=["POST"])
+def validate_token():
+    token = request.json.get("token")
+    if token and token in tokens:
+        return jsonify({"valid": True})
+    else:
+        return jsonify({"valid": False}), 401
+
+# Token generation endpoint (unchanged)
+@app.route("/generate_token", methods=["POST"])
+def generate_token_endpoint():
+    token = generate_token()
+    tokens.add(token)
+    save_tokens(tokens)
+    return jsonify({"token": token})
+
+# Balance route with API usage check (updated)
+@app.route("/balance/<address>")
+@token_required
+@api_usage_check
+def balance_route(address):
     global api_index
 
     retries = 3
     backoff = 1
 
-    for i in range(len(btc_balance_apis)):
+    while retries > 0:
         try:
             url = btc_balance_apis[api_index].format(address)
             response = requests.get(url)
@@ -108,10 +134,15 @@ def get_balance(address):
 
             if "error" in data:
                 api_index = (api_index + 1) % len(btc_balance_apis)
+                retries -= 1
+                if retries > 0:
+                    time.sleep(backoff)
+                    backoff *= 2
                 continue
             else:
                 balance = data["balance"] / 10**8
                 return jsonify({"balance": balance})
+
         except requests.exceptions.RequestException:
             api_index = (api_index + 1) % len(btc_balance_apis)
             retries -= 1
@@ -122,47 +153,27 @@ def get_balance(address):
 
     return jsonify({"error": "Failed to fetch balance"}), 500
 
-@app.route("/balance/<address>")
-@token_required
-def balance_route(address):
-    return get_balance(address)
+# Online users management endpoints (updated)
+@app.teardown_request
+def remove_user_online(exception=None):
+    db.decr("online_users")
 
-@app.route("/version")
-def version():
-    return "1.0"
+@app.route("/online_users", methods=["GET"])
+def get_online_users():
+    users = db.get("online_users") or 0
+    return jsonify({"users": int(users)})
 
-@app.route("/online_users", methods=["GET", "POST"])
-def manage_online_users():
-    if request.method == "GET":
-        return jsonify({"users": list(online_users)})
-    elif request.method == "POST":
-        user = request.json.get("user")
-        if user:
-            online_users.add(user)
-            return jsonify({"message": f"{user} added to online users"})
-        else:
-            return jsonify({"error": "User not provided"}), 400
-
-@app.route("/status")
-def api_status():
-    return jsonify({"api_usage": api_index / len(btc_balance_apis)})
-
-# Token validation endpoint
-@app.route("/validate_token", methods=["POST"])
-def validate_token():
-    token = request.json.get("token")
-    if token and token in tokens:
-        return jsonify({"valid": True})
+@app.route("/online_users", methods=["POST"])
+def add_online_user():
+    user = request.json.get("user")
+    if user:
+        db.incr("online_users")
+        print({"message": f"{user} added to online users"})
+        return jsonify({"message": f"{user} added to online users"})
     else:
-        return jsonify({"valid": False}), 401
+        return jsonify({"error": "User not provided"}), 400
+    return jsonify({"users": int(users)})
 
-# Token generation endpoint
-@app.route("/generate_token", methods=["POST"])
-def generate_token_endpoint():
-    token = generate_token()
-    tokens.add(token)
-    save_tokens(tokens)
-    return jsonify({"token": token})
 
 if __name__ == "__main__":
     app.run()

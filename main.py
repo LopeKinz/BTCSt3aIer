@@ -1,16 +1,14 @@
 import requests
 import random
-import pycoin
-from blockstream import blockstream_client
+from bitcoinlib.keys import HDKey
 import time
 
 API_THRESHOLD = 0.8
-API_STATUS_URL = "http://localhost:5000/status"  # Update with the correct API status endpoint URL
+API_STATUS_URL = "http://localhost:5000/status"
 
 def get_api_status():
     try:
         response = requests.get(API_STATUS_URL)
-
         if response.status_code == 200:
             api_usage = response.json()["api_usage"]
             return api_usage
@@ -20,18 +18,7 @@ def get_api_status():
         return "Error"
 
 def get_online_users(token):
-    api_status = get_api_status()
-
-    if api_status == "Error":
-        print("Error occurred while retrieving API status.")
-        return
-
-    print(f"API Usage: {api_status * 100:.2f}%")
-
-    if api_status > API_THRESHOLD:
-        print("Warning: The API usage is high. Consider reducing the load on the API.")
-        while True:
-            time.sleep(1)
+    # ...
 
     try:
         url = "http://localhost:5000/online_users"
@@ -40,24 +27,19 @@ def get_online_users(token):
 
         if response.status_code == 200:
             users = response.json()["users"]
-            return len(users)
+            return users
         else:
             return "Error"
     except requests.exceptions.RequestException as e:
         return "Error"
+    
 
 def generate_random_address():
-    secret_exponent = random.randint(1, pycoin.ecdsa.secp256k1.generator.order())
-    wif = pycoin.key.Key(secret_exponent=secret_exponent).wif()
-    return wif_to_address(wif)
-
-def wif_to_address(wif):
-    key = pycoin.key.Key.from_text(wif)
-    return key.address()
+    key = HDKey()
+    address = key.address()
+    return address
 
 def find_wallet_balance(token):
-    blockstream = blockstream_client.Client()
-
     num_addresses = int(input("Enter the number of addresses to generate and check: "))
     filename = input("Enter the filename to save the addresses with balance: ")
 
@@ -66,10 +48,15 @@ def find_wallet_balance(token):
     for _ in range(num_addresses):
         address = generate_random_address()
         headers = {"Authorization": token}
-        balance = blockstream.get_address(address, headers=headers)["chain_stats"]["funded_txo_sum"]
+        url = f"http://localhost:5000/balance/{address}"
+        response = requests.get(url, headers=headers)
 
-        if balance > 0:
-            addresses_with_balance.append(address)
+        if response.status_code == 200:
+            data = response.json()
+            balance = data.get("balance")
+            print(f"Checked {address} and has 0 Balance!")
+            if balance and balance > 0:
+                addresses_with_balance.append(address)
 
     with open(filename, "w") as file:
         for address in addresses_with_balance:
@@ -77,11 +64,19 @@ def find_wallet_balance(token):
 
     print(f"{len(addresses_with_balance)} addresses with balance found. Saved to {filename}.")
 
-def main():
+def validate_token(token):
+    headers = {"Authorization": token}
+    url = "http://localhost:5000/validate_token"
+    response = requests.post(url, json={"token": token}, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        valid = data.get("valid")
+        return valid
+    else:
+        return False
+
+def main_menu(token):
     print("Bitcoin Wallet Finder")
-
-    token = input("Enter your token: ")
-
     while True:
         online_users = get_online_users(token)
         print(f"---Online: {online_users} users---")
@@ -96,7 +91,6 @@ def main():
                 print("- find wallet <address>")
                 print("- exit")
             elif command.startswith("find wallet"):
-                _, _, address = command.split()
                 find_wallet_balance(token)
             elif command == "exit":
                 break
@@ -105,5 +99,13 @@ def main():
 
         time.sleep(1)
 
+def main():
+    token = input("Enter your token: ")
+    if not validate_token(token):
+        print("Invalid token. Exiting...")
+        exit()
+    main_menu(token)
+
 if __name__ == "__main__":
     main()
+
