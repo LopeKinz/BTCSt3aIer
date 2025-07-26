@@ -6,7 +6,7 @@ Werkzeug==3.0.1
 
 # HTTP Requests
 requests==2.31.0
-urllib3==2.1.0
+urllib3==2.5.0
 
 # Bitcoin Library
 bitcoinlib==0.12.0
