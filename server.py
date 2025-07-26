@@ -1,179 +1,381 @@
 from flask import Flask, jsonify, request
-import redis
-
-app = Flask(__name__)
-db = redis.Redis()
 import requests
 import random
 import string
+import time
+import logging
+from functools import wraps
+from datetime import datetime, timedelta
+import json
+import os
+from typing import Dict, List, Optional
 
+# Logging konfigurieren
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
+app = Flask(__name__)
 
-users = 0
+# Globale Variablen
+online_users = 0
+api_request_count = 0
+last_reset_time = datetime.now()
+user_sessions = {}  # Token -> letzte Aktivität
 
+# Aktualisierte und funktionsfähige Bitcoin API Endpunkte
 btc_balance_apis = [
-    "https://api.blockcypher.com/v1/btc/main/addrs/{}/balance",
-    "https://api.smartbit.com.au/v1/blockchain/address/{}/balance",
-    "https://chain.api.btc.com/v3/address/{}",
-    "https://api.blockchair.com/bitcoin/dashboards/address/{}",
-    "https://api.blockexplorer.com/v1/address/{}/balance",
-    "https://api.blockstream.space/api/address/{}/coins",
-    "https://blockchain.info/q/addressbalance/{}",
-    "https://api.walletexplorer.com/api/1/address?address={}",
-    "https://api.blockchain.com/v3/address/{}/balance",
-    "https://api.toshi.io/api/v0/bitcoin/addresses/{}",
-    "https://bitcoin.toshi.io/api/v0/addresses/{}/balance",
-    "https://blockexplorer.com/api/addr/{}/balance",
-    "https://btc.bitaps.com/{}/balance",
-    "https://api.btc21.org/address/{}",
-    "https://www.bitstamp.net/api/v2/balance/{}/",
-    "https://chain.so/api/v2/address/BTC/{}",
-    "https://api.cryptoapis.io/v1/bc/btc/mainnet/address/{}/balance",
-    "https://api.whatsonchain.com/v1/bsv/main/address/{}/balance",
-    "https://rest.bitcoin.com/v2/address/details/{}",
-    "https://api.blockcypher.com/v2/btc/main/addrs/{}/balance",
-    "https://blockchair.com/bitcoin/api/address/{}",
-    "https://www.blockonomics.co/api/balance?addr={}",
-    "https://blockexplorer.com/api/addr/{}/utxo",
-    "https://chainz.cryptoid.info/btc/api.dws?q=getbalance&a={}",
-    "https://o1testnet1.minepi.com/blockchain/pi/{}",
-    "https://live.blockcypher.com/btc/address/{}/",
-    "https://api.bitaps.com/btc/v1/blockchain/address/{}",
-    "https://api.gemini.com/v1/balances/{}/",
-    "https://api.indodax.com/v2/btc_address/{}/balance",
-    "https://api.luno.com/api/1/balance",
-    "https://api.novadax.com/v1/account/getBalance/{}/BTC",
-    "https://api.paymium.com/api/v1/users/{}/bitcoin_accounts/0/balance",
-    "https://api.zebpay.com/api/v1/user/balance/{}/btc"
+    {
+        "url": "https://blockchain.info/q/addressbalance/{}",
+        "response_key": None,  # Direkte Antwort in Satoshi
+        "divisor": 100000000
+    },
+    {
+        "url": "https://blockstream.info/api/address/{}/coins",
+        "response_key": "address.chain_stats.funded_txo_sum",
+        "divisor": 100000000
+    },
+    {
+        "url": "https://api.blockcypher.com/v1/btc/main/addrs/{}/balance",
+        "response_key": "balance",
+        "divisor": 100000000
+    },
+    {
+        "url": "https://api.blockchair.com/bitcoin/dashboards/address/{}",
+        "response_key": "data.{}.address.balance",
+        "divisor": 100000000
+    },
+    {
+        "url": "https://chain.api.btc.com/v3/address/{}",
+        "response_key": "data.balance",
+        "divisor": 100000000
+    },
+    {
+        "url": "https://mempool.space/api/address/{}",
+        "response_key": "chain_stats.funded_txo_sum",
+        "divisor": 100000000
+    }
 ]
-api_index = 0
 
-# Function to generate a random token (unchanged)
-def generate_token(length=16):
-    letters_and_digits = string.ascii_letters + string.digits
-    return ''.join(random.choice(letters_and_digits) for _ in range(length))
+current_api_index = 0
 
-# Function to save tokens to a file (unchanged)
-def save_tokens(tokens):
-    with open('tokens.txt', 'w') as f:
-        for token in tokens:
-            f.write(token + '\n')
-
-# Function to load tokens from a file (unchanged)
-def load_tokens():
-    try:
-        with open('tokens.txt', 'r') as f:
-            tokens = [line.strip() for line in f]
-            return set(tokens)
-    except FileNotFoundError:
+class TokenManager:
+    def __init__(self):
+        self.tokens_file = 'tokens.txt'
+        self.tokens = self.load_tokens()
+        if not self.tokens:
+            self.generate_initial_tokens()
+    
+    def generate_token(self, length: int = 32) -> str:
+        """Generiert einen sicheren Token"""
+        chars = string.ascii_letters + string.digits
+        return ''.join(random.choice(chars) for _ in range(length))
+    
+    def generate_initial_tokens(self):
+        """Generiert initiale Tokens"""
+        logger.info("Generiere initiale Tokens...")
+        for _ in range(10):
+            token = self.generate_token()
+            self.tokens.add(token)
+        self.save_tokens()
+    
+    def save_tokens(self):
+        """Speichert Tokens in Datei"""
+        try:
+            with open(self.tokens_file, 'w') as f:
+                for token in self.tokens:
+                    f.write(token + '\n')
+            logger.info(f"{len(self.tokens)} Tokens gespeichert")
+        except Exception as e:
+            logger.error(f"Fehler beim Speichern der Tokens: {e}")
+    
+    def load_tokens(self) -> set:
+        """Lädt Tokens aus Datei"""
+        try:
+            if os.path.exists(self.tokens_file):
+                with open(self.tokens_file, 'r') as f:
+                    tokens = {line.strip() for line in f if line.strip()}
+                logger.info(f"{len(tokens)} Tokens geladen")
+                return tokens
+        except Exception as e:
+            logger.error(f"Fehler beim Laden der Tokens: {e}")
         return set()
+    
+    def is_valid(self, token: str) -> bool:
+        """Überprüft ob Token gültig ist"""
+        return token in self.tokens
+    
+    def add_token(self, token: str):
+        """Fügt neuen Token hinzu"""
+        self.tokens.add(token)
+        self.save_tokens()
 
-tokens = load_tokens()
-tokens.update(generate_token() for _ in range(10))
-save_tokens(tokens)
+# Token Manager initialisieren
+token_manager = TokenManager()
 
-# Token validation decorator (unchanged)
+def clean_bearer_token(token: str) -> str:
+    """Entfernt 'Bearer ' Präfix falls vorhanden"""
+    if token and token.startswith('Bearer '):
+        return token[7:]
+    return token or ""
+
 def token_required(f):
+    """Decorator für Token-Validierung"""
+    @wraps(f)
     def decorated_function(*args, **kwargs):
-        token = request.headers.get("Authorization")
-        if token and token in tokens:
-            return f(*args, **kwargs)
-        else:
-            return jsonify({"error": "Invalid token"}), 401
+        auth_header = request.headers.get("Authorization", "")
+        token = clean_bearer_token(auth_header)
+        
+        if not token or not token_manager.is_valid(token):
+            logger.warning(f"Ungültiger Token-Versuch: {token[:10]}...")
+            return jsonify({"error": "Ungültiges oder fehlendes Token"}), 401
+        
+        # Benutzer-Session aktualisieren
+        update_user_session(token)
+        return f(*args, **kwargs)
     return decorated_function
 
-# API usage check decorator (new)
 def api_usage_check(f):
+    """Decorator für API-Nutzungsüberwachung"""
+    @wraps(f)
     def decorated_function(*args, **kwargs):
-        api_usage = api_index / len(btc_balance_apis)
-        if api_usage > 0.8:
-            return jsonify({"error": "API usage limit exceeded"}), 429
-        else:
-            return f(*args, **kwargs)
+        global api_request_count, last_reset_time
+        
+        # Stündliche Zurücksetzung der API-Zähler
+        now = datetime.now()
+        if now - last_reset_time > timedelta(hours=1):
+            api_request_count = 0
+            last_reset_time = now
+            logger.info("API-Zähler zurückgesetzt")
+        
+        api_usage = api_request_count / 1000  # Limit auf 1000 Anfragen pro Stunde
+        
+        if api_usage > 0.9:
+            logger.warning(f"API-Limit fast erreicht: {api_usage:.2%}")
+            return jsonify({"error": "API-Nutzungslimit fast erreicht. Bitte später versuchen."}), 429
+        
+        api_request_count += 1
+        return f(*args, **kwargs)
     return decorated_function
 
+def update_user_session(token: str):
+    """Aktualisiert die Benutzer-Session"""
+    global user_sessions
+    user_sessions[token] = datetime.now()
 
-# API status endpoint (new)
+def cleanup_old_sessions():
+    """Entfernt alte Sessions"""
+    global user_sessions, online_users
+    cutoff_time = datetime.now() - timedelta(minutes=5)
+    old_tokens = [token for token, last_seen in user_sessions.items() if last_seen < cutoff_time]
+    
+    for token in old_tokens:
+        del user_sessions[token]
+    
+    online_users = len(user_sessions)
+
+def get_btc_balance(address: str) -> Optional[float]:
+    """Holt Bitcoin-Guthaben von verschiedenen APIs"""
+    global current_api_index
+    
+    for attempt in range(len(btc_balance_apis)):
+        api_config = btc_balance_apis[current_api_index]
+        
+        try:
+            url = api_config["url"].format(address)
+            logger.debug(f"Versuche API {current_api_index}: {url}")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                if api_config["response_key"] is None:
+                    # Direkte Antwort (wie blockchain.info)
+                    try:
+                        balance_satoshi = int(response.text.strip())
+                        balance_btc = balance_satoshi / api_config["divisor"]
+                        logger.debug(f"Erfolgreich von API {current_api_index}: {balance_btc} BTC")
+                        return balance_btc
+                    except ValueError:
+                        logger.warning(f"Ungültige Antwort von API {current_api_index}")
+                else:
+                    # JSON-Antwort
+                    try:
+                        data = response.json()
+                        
+                        # Navigiere durch verschachtelte Keys
+                        key_path = api_config["response_key"]
+                        if "{}" in key_path:
+                            key_path = key_path.format(address)
+                        
+                        balance_satoshi = data
+                        for key in key_path.split('.'):
+                            if key in balance_satoshi:
+                                balance_satoshi = balance_satoshi[key]
+                            else:
+                                raise KeyError(f"Key '{key}' nicht gefunden")
+                        
+                        balance_btc = float(balance_satoshi) / api_config["divisor"]
+                        logger.debug(f"Erfolgreich von API {current_api_index}: {balance_btc} BTC")
+                        return balance_btc
+                    except (KeyError, ValueError, TypeError) as e:
+                        logger.warning(f"Fehler beim Parsen der Antwort von API {current_api_index}: {e}")
+            else:
+                logger.warning(f"API {current_api_index} antwortete mit Status {response.status_code}")
+                
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Anfrage-Fehler bei API {current_api_index}: {e}")
+        
+        # Zur nächsten API wechseln
+        current_api_index = (current_api_index + 1) % len(btc_balance_apis)
+        time.sleep(0.5)  # Kurze Pause zwischen API-Versuchen
+    
+    logger.error(f"Alle APIs fehlgeschlagen für Adresse: {address}")
+    return None
+
+# API Endpunkte
+
 @app.route("/status")
 def api_status():
-    api_usage = api_index / len(btc_balance_apis)
-    return jsonify({"api_usage": api_usage})
+    """API-Status Endpunkt"""
+    cleanup_old_sessions()
+    
+    api_usage = api_request_count / 1000  # Basierend auf 1000 Anfragen pro Stunde
+    
+    status_info = {
+        "api_usage": min(api_usage, 1.0),  # Maximal 1.0
+        "online_users": online_users,
+        "current_api": current_api_index,
+        "total_apis": len(btc_balance_apis),
+        "requests_this_hour": api_request_count,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    return jsonify(status_info)
 
-# Token validation endpoint (unchanged)
 @app.route("/validate_token", methods=["POST"])
 def validate_token():
-    token = request.json.get("token")
-    if token and token in tokens:
-        return jsonify({"valid": True})
-    else:
-        return jsonify({"valid": False}), 401
+    """Token-Validierung Endpunkt"""
+    try:
+        auth_header = request.headers.get("Authorization", "")
+        token = clean_bearer_token(auth_header)
+        
+        # Auch aus JSON Body prüfen als Fallback
+        json_data = request.get_json() or {}
+        if not token:
+            token = json_data.get("token", "")
+        
+        is_valid = token_manager.is_valid(token)
+        
+        if is_valid:
+            update_user_session(token)
+            logger.info(f"Token erfolgreich validiert: {token[:10]}...")
+        else:
+            logger.warning(f"Token-Validierung fehlgeschlagen: {token[:10]}...")
+        
+        return jsonify({"valid": is_valid})
+    
+    except Exception as e:
+        logger.error(f"Fehler bei Token-Validierung: {e}")
+        return jsonify({"valid": False}), 500
 
-# Token generation endpoint (unchanged)
 @app.route("/generate_token", methods=["POST"])
 def generate_token_endpoint():
-    token = generate_token()
-    tokens.add(token)
-    save_tokens(tokens)
-    return jsonify({"token": token})
+    """Token-Generierung Endpunkt"""
+    try:
+        token = token_manager.generate_token()
+        token_manager.add_token(token)
+        
+        logger.info(f"Neuer Token generiert: {token[:10]}...")
+        return jsonify({"token": token})
+    
+    except Exception as e:
+        logger.error(f"Fehler bei Token-Generierung: {e}")
+        return jsonify({"error": "Token-Generierung fehlgeschlagen"}), 500
 
-# Balance route with API usage check (updated)
 @app.route("/balance/<address>")
 @token_required
 @api_usage_check
-def balance_route(address):
-    global api_index
-
-    retries = 3
-    backoff = 1
-
-    while retries > 0:
-        try:
-            url = btc_balance_apis[api_index].format(address)
-            response = requests.get(url)
-            data = response.json()
-
-            if "error" in data:
-                api_index = (api_index + 1) % len(btc_balance_apis)
-                retries -= 1
-                if retries > 0:
-                    time.sleep(backoff)
-                    backoff *= 2
-                continue
-            else:
-                balance = data["balance"] / 10**8
-                return jsonify({"balance": balance})
-
-        except requests.exceptions.RequestException:
-            api_index = (api_index + 1) % len(btc_balance_apis)
-            retries -= 1
-            if retries > 0:
-                time.sleep(backoff)
-                backoff *= 2
-            continue
-
-    return jsonify({"error": "Failed to fetch balance"}), 500
-
-# Online users management endpoints (updated)
-@app.teardown_request
-def remove_user_online(exception=None):
-    db.decr("online_users")
+def balance_route(address: str):
+    """Bitcoin-Guthaben Endpunkt"""
+    try:
+        # Einfache Adressvalidierung
+        if not address or len(address) < 26 or len(address) > 62:
+            return jsonify({"error": "Ungültige Bitcoin-Adresse"}), 400
+        
+        logger.info(f"Guthaben-Anfrage für Adresse: {address}")
+        
+        balance = get_btc_balance(address)
+        
+        if balance is not None:
+            return jsonify({
+                "address": address,
+                "balance": balance,
+                "timestamp": datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                "error": "Guthaben konnte nicht abgerufen werden",
+                "address": address
+            }), 503
+    
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen des Guthabens für {address}: {e}")
+        return jsonify({"error": "Interner Server-Fehler"}), 500
 
 @app.route("/online_users", methods=["GET"])
+@token_required
 def get_online_users():
-    users = db.get("online_users") or 0
-    return jsonify({"users": int(users)})
+    """Online-Benutzer abrufen"""
+    cleanup_old_sessions()
+    return jsonify({"users": online_users})
 
 @app.route("/online_users", methods=["POST"])
+@token_required  
 def add_online_user():
-    user = request.json.get("user")
-    if user:
-        db.incr("online_users")
-        print({"message": f"{user} added to online users"})
-        return jsonify({"message": f"{user} added to online users"})
-    else:
-        return jsonify({"error": "User not provided"}), 400
-    return jsonify({"users": int(users)})
+    """Benutzer als online markieren"""
+    try:
+        auth_header = request.headers.get("Authorization", "")
+        token = clean_bearer_token(auth_header)
+        
+        update_user_session(token)
+        cleanup_old_sessions()
+        
+        return jsonify({
+            "message": "Benutzer als online markiert",
+            "users": online_users
+        })
+    
+    except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen des Online-Benutzers: {e}")
+        return jsonify({"error": "Interner Server-Fehler"}), 500
 
+@app.route("/health")
+def health_check():
+    """Gesundheitscheck Endpunkt"""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "2.0.0"
+    })
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Endpunkt nicht gefunden"}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({"error": "Interner Server-Fehler"}), 500
 
 if __name__ == "__main__":
-    app.run()
+    logger.info("Bitcoin Wallet Finder Server wird gestartet...")
+    logger.info(f"Server läuft mit {len(btc_balance_apis)} Bitcoin APIs")
+    logger.info(f"{len(token_manager.tokens)} Tokens verfügbar")
+    
+    # Entwicklungsmodus mit Debug
+    app.run(debug=True, host='127.0.0.1', port=5000)
